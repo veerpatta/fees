@@ -57,7 +57,7 @@ async function login(email, password) {
     await logAudit('login', {
       userId: user.uid,
       email: user.email,
-      role: currentUser.role
+      role: userData.role
     });
 
     return currentUser;
