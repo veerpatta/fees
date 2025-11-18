@@ -35,25 +35,49 @@ async function initDashboard() {
     // Check authentication
     currentUser = await checkAuth(['principal', 'staff']);
 
-    // Update UI with user info
-    updateUserInfo();
+    // Update UI with user info (with fallback)
+    try {
+      updateUserInfo();
+    } catch (error) {
+      console.error('Error loading user info:', error);
+      // Show basic info from Firebase Auth as fallback
+      const user = await getCurrentUser();
+      document.getElementById('userName').textContent = user?.email || 'User';
+      document.getElementById('userRole').textContent = user?.role || 'Loading...';
+    }
 
-    // Load academic years
-    await populateAcademicYears();
+    // Load academic years (with empty state handling)
+    try {
+      await populateAcademicYears();
+    } catch (error) {
+      console.error('Error loading academic years:', error);
+      showAlert('Failed to load academic years. Please try refreshing the page.', 'error');
+    }
 
     // Load dashboard data
-    await loadDashboardData();
+    try {
+      await loadDashboardData();
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+      // Don't block the UI, just show empty dashboard
+    }
 
     // Setup event listeners
     setupEventListeners();
 
-    showLoading(false);
   } catch (error) {
     console.error('Dashboard initialization error:', error);
-    showAlert('Failed to load dashboard. Redirecting to login...', 'error');
-    setTimeout(() => {
-      window.location.href = 'index.html';
-    }, 2000);
+    showAlert('Failed to load dashboard. Please refresh the page or contact support.', 'error');
+
+    // If critical auth error, redirect to login
+    if (error.message?.includes('Not authenticated') || error.message?.includes('Unauthorized')) {
+      setTimeout(() => {
+        window.location.href = 'index.html';
+      }, 2000);
+    }
+  } finally {
+    // ALWAYS remove loading state, even if errors occurred
+    showLoading(false);
   }
 }
 
