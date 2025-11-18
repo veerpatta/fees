@@ -30,27 +30,41 @@ let academicYears = [];
 // Initialize dashboard
 async function initDashboard() {
   try {
-    showLoading(true);
+    console.log('=== Dashboard Initialization Started ===');
+    showLoading(true, 'Checking authentication...');
 
     // Check authentication
+    console.log('Checking authentication...');
     currentUser = await checkAuth(['principal', 'staff']);
+    console.log('Authentication successful:', currentUser);
 
     // Update UI with user info
+    console.log('Updating user info...');
     updateUserInfo();
 
     // Load academic years
+    console.log('Loading academic years...');
+    showLoading(true, 'Loading academic years...');
     await populateAcademicYears();
+    console.log('Academic years loaded successfully');
 
     // Load dashboard data
+    console.log('Loading dashboard data...');
+    showLoading(true, 'Loading dashboard data...');
     await loadDashboardData();
+    console.log('Dashboard data loaded successfully');
 
     // Setup event listeners
+    console.log('Setting up event listeners...');
     setupEventListeners();
 
     showLoading(false);
+    console.log('=== Dashboard Initialization Complete ===');
   } catch (error) {
-    console.error('Dashboard initialization error:', error);
-    showAlert('Failed to load dashboard. Redirecting to login...', 'error');
+    console.error('=== Dashboard initialization error ===', error);
+    console.error('Error details:', error.message, error.stack);
+    showLoading(false);
+    showAlert('Failed to load dashboard: ' + error.message + '. Redirecting to login...', 'error');
     setTimeout(() => {
       window.location.href = 'index.html';
     }, 2000);
@@ -73,13 +87,21 @@ function updateUserInfo() {
 // Load academic years and populate dropdown
 async function populateAcademicYears() {
   try {
+    console.log('Fetching academic years from Firestore...');
     academicYears = await loadAcademicYears();
+    console.log('Academic years fetched:', academicYears.length, 'years found');
 
     // Populate academic year dropdown
     const yearSelect = document.getElementById('academicYear');
+    if (!yearSelect) {
+      console.error('Academic year select element not found');
+      throw new Error('Academic year dropdown not found in DOM');
+    }
+
     yearSelect.innerHTML = '';
 
     if (academicYears.length === 0) {
+      console.warn('No academic years found in database');
       yearSelect.innerHTML = '<option value="">No academic years found</option>';
       if (isPrincipal()) {
         showAlert('Please create an academic year first. Go to Academic Years to create one.', 'warning');
@@ -90,6 +112,7 @@ async function populateAcademicYears() {
     // Find current/active year
     const activeYear = getActiveAcademicYear() || academicYears[0];
     currentAcademicYear = activeYear.id;
+    console.log('Active academic year set to:', activeYear.name, '(ID:', currentAcademicYear, ')');
 
     // Set globally
     setGlobalAcademicYear(currentAcademicYear);
@@ -103,34 +126,53 @@ async function populateAcademicYears() {
       }
       yearSelect.appendChild(option);
     });
+    console.log('Academic year dropdown populated with', academicYears.length, 'options');
   } catch (error) {
-    console.error('Error loading academic years:', error);
-    showAlert('Failed to load academic years', 'error');
+    console.error('Error in populateAcademicYears:', error);
+    console.error('Error stack:', error.stack);
+    showAlert('Failed to load academic years: ' + error.message, 'error');
+    throw error; // Re-throw to stop initialization
   }
 }
 
 // Load dashboard data
 async function loadDashboardData() {
-  if (!currentAcademicYear) return;
+  if (!currentAcademicYear) {
+    console.warn('No current academic year selected, skipping dashboard data load');
+    return;
+  }
 
   try {
+    console.log('Loading dashboard data for academic year:', currentAcademicYear);
+
     // Load statistics
+    console.log('Loading statistics...');
     await loadStatistics();
+    console.log('Statistics loaded');
 
     // Load recent payments
+    console.log('Loading recent payments...');
     await loadRecentPayments();
+    console.log('Recent payments loaded');
 
     // Load pending payments
+    console.log('Loading pending payments...');
     await loadPendingPayments();
+    console.log('Pending payments loaded');
+
+    console.log('All dashboard data loaded successfully');
   } catch (error) {
     console.error('Error loading dashboard data:', error);
-    showAlert('Failed to load dashboard data', 'error');
+    console.error('Error details:', error.message, error.stack);
+    showAlert('Failed to load dashboard data: ' + error.message, 'error');
   }
 }
 
 // Load statistics
 async function loadStatistics() {
   try {
+    console.log('Querying students for academic year:', currentAcademicYear);
+
     // Get total students for current year
     const studentsQuery = query(
       collection(db, 'students'),
@@ -138,6 +180,7 @@ async function loadStatistics() {
     );
     const studentsSnapshot = await getDocs(studentsQuery);
     const students = studentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    console.log('Students found:', students.length);
 
     document.getElementById('totalStudents').textContent = students.length;
 
@@ -154,33 +197,48 @@ async function loadStatistics() {
       totalPending += (fees - paid);
     });
 
+    console.log('Total collected:', totalCollected, 'Total pending:', totalPending);
     document.getElementById('totalCollected').textContent = formatCurrency(totalCollected);
     document.getElementById('totalPending').textContent = formatCurrency(totalPending);
 
     // Get today's collection
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    console.log('Querying today\'s payments (since:', today, ')');
 
-    const paymentsQuery = query(
-      collection(db, 'payments'),
-      where('academicYear', '==', currentAcademicYear),
-      where('paymentDate', '>=', today)
-    );
-    const paymentsSnapshot = await getDocs(paymentsQuery);
-    const todayPayments = paymentsSnapshot.docs.map(doc => doc.data());
+    try {
+      const paymentsQuery = query(
+        collection(db, 'payments'),
+        where('academicYear', '==', currentAcademicYear),
+        where('paymentDate', '>=', today)
+      );
+      const paymentsSnapshot = await getDocs(paymentsQuery);
+      const todayPayments = paymentsSnapshot.docs.map(doc => doc.data());
+      console.log('Today\'s payments found:', todayPayments.length);
 
-    const todayTotal = todayPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
-    document.getElementById('todayCollection').textContent = formatCurrency(todayTotal);
-    document.getElementById('todayPaymentsCount').textContent =
-      `${todayPayments.length} payment${todayPayments.length !== 1 ? 's' : ''} today`;
+      const todayTotal = todayPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+      document.getElementById('todayCollection').textContent = formatCurrency(todayTotal);
+      document.getElementById('todayPaymentsCount').textContent =
+        `${todayPayments.length} payment${todayPayments.length !== 1 ? 's' : ''} today`;
+    } catch (paymentError) {
+      console.warn('Error loading today\'s payments (may need Firestore index):', paymentError);
+      console.warn('Skipping today\'s collection - composite index may be required');
+      // Set default values if today's payments query fails
+      document.getElementById('todayCollection').textContent = formatCurrency(0);
+      document.getElementById('todayPaymentsCount').textContent = '0 payments today';
+    }
   } catch (error) {
     console.error('Error loading statistics:', error);
+    console.error('Error details:', error.message, error.stack);
+    throw error;
   }
 }
 
 // Load recent payments
 async function loadRecentPayments() {
   try {
+    console.log('Querying recent payments for academic year:', currentAcademicYear);
+
     const paymentsQuery = query(
       collection(db, 'payments'),
       where('academicYear', '==', currentAcademicYear),
@@ -190,6 +248,7 @@ async function loadRecentPayments() {
 
     const snapshot = await getDocs(paymentsQuery);
     const payments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    console.log('Recent payments found:', payments.length);
 
     const container = document.getElementById('recentPaymentsTable');
 
@@ -246,12 +305,31 @@ async function loadRecentPayments() {
     container.innerHTML = html;
   } catch (error) {
     console.error('Error loading recent payments:', error);
+    console.error('Error details:', error.message, error.stack);
+
+    // Check if it's an index error
+    if (error.code === 'failed-precondition' || error.message.includes('index')) {
+      console.error('Firestore composite index required for recent payments query');
+      const container = document.getElementById('recentPaymentsTable');
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">⚠️</div>
+          <h3>Index Required</h3>
+          <p>Please create a Firestore composite index for the payments collection.</p>
+          <p style="font-size: 0.9em; color: #666;">Fields: academicYear (Ascending), paymentDate (Descending)</p>
+        </div>
+      `;
+    } else {
+      throw error;
+    }
   }
 }
 
 // Load pending payments
 async function loadPendingPayments() {
   try {
+    console.log('Querying students with pending payments for academic year:', currentAcademicYear);
+
     const studentsQuery = query(
       collection(db, 'students'),
       where('academicYear', '==', currentAcademicYear)
@@ -259,12 +337,14 @@ async function loadPendingPayments() {
 
     const snapshot = await getDocs(studentsQuery);
     const students = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    console.log('Students queried:', students.length);
 
     // Filter students with pending dues
     const pendingStudents = students.filter(s => {
       const pending = (s.totalFees || 0) - (s.totalPaid || 0);
       return pending > 0;
     });
+    console.log('Students with pending dues:', pendingStudents.length);
 
     const container = document.getElementById('pendingPaymentsTable');
 
@@ -322,6 +402,8 @@ async function loadPendingPayments() {
     container.innerHTML = html;
   } catch (error) {
     console.error('Error loading pending payments:', error);
+    console.error('Error details:', error.message, error.stack);
+    throw error;
   }
 }
 

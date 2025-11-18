@@ -80,21 +80,34 @@ async function logout() {
 // Check authentication state
 function checkAuth(requiredRoles = []) {
   return new Promise((resolve, reject) => {
-    onAuthStateChanged(auth, async (user) => {
+    // Set up a timeout to prevent infinite loading
+    const timeout = setTimeout(() => {
+      reject(new Error('Authentication check timeout'));
+    }, 10000); // 10 second timeout
+
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      clearTimeout(timeout);
+      unsubscribe(); // Unsubscribe immediately after first call
+
       if (!user) {
+        console.error('No authenticated user found');
         reject(new Error('Not authenticated'));
         return;
       }
 
       try {
+        console.log('Fetching user profile for:', user.uid);
         const userDoc = await getDoc(doc(db, 'users', user.uid));
 
         if (!userDoc.exists()) {
+          console.error('User profile not found in Firestore for uid:', user.uid);
           reject(new Error('User profile not found'));
           return;
         }
 
         const userData = userDoc.data();
+        console.log('User profile loaded:', userData);
+
         currentUser = {
           uid: user.uid,
           email: user.email,
@@ -105,14 +118,22 @@ function checkAuth(requiredRoles = []) {
 
         // Check if user has required role
         if (requiredRoles.length > 0 && !requiredRoles.includes(currentUser.role)) {
+          console.error('Insufficient permissions. User role:', currentUser.role, 'Required:', requiredRoles);
           reject(new Error('Insufficient permissions'));
           return;
         }
 
+        console.log('Authentication successful for:', currentUser.name);
         resolve(currentUser);
       } catch (error) {
+        console.error('Error fetching user profile:', error);
         reject(error);
       }
+    }, (error) => {
+      // Error callback for onAuthStateChanged
+      clearTimeout(timeout);
+      console.error('Auth state change error:', error);
+      reject(error);
     });
   });
 }
