@@ -90,22 +90,7 @@ function checkAuth(requiredRoles = []) {
         const userDoc = await getDoc(doc(db, 'users', user.uid));
 
         if (!userDoc.exists()) {
-          // Fallback: Create basic user object from Firebase Auth
-          console.warn('checkAuth: User profile not found in Firestore, using Firebase Auth data as fallback');
-          currentUser = {
-            uid: user.uid,
-            email: user.email,
-            role: 'staff', // Default role when Firestore profile is missing
-            name: user.displayName || user.email?.split('@')[0] || 'User'
-          };
-
-          // Check if user has required role
-          if (requiredRoles.length > 0 && !requiredRoles.includes(currentUser.role)) {
-            reject(new Error('Insufficient permissions'));
-            return;
-          }
-
-          resolve(currentUser);
+          reject(new Error('User profile not found'));
           return;
         }
 
@@ -126,15 +111,7 @@ function checkAuth(requiredRoles = []) {
 
         resolve(currentUser);
       } catch (error) {
-        console.error('checkAuth: Error loading user profile:', error);
-        // Don't reject completely - provide fallback user
-        currentUser = {
-          uid: user.uid,
-          email: user.email,
-          role: 'staff',
-          name: user.displayName || user.email?.split('@')[0] || 'User'
-        };
-        resolve(currentUser);
+        reject(error);
       }
     });
   });
@@ -142,26 +119,7 @@ function checkAuth(requiredRoles = []) {
 
 // Get current user
 function getCurrentUser() {
-  // If currentUser is populated, return it
-  if (currentUser) {
-    return currentUser;
-  }
-
-  // Fallback: Try to get basic info from Firebase Auth
-  const firebaseUser = auth.currentUser;
-  if (firebaseUser) {
-    console.warn('getCurrentUser: Firestore user data not loaded, using Firebase Auth fallback');
-    return {
-      uid: firebaseUser.uid,
-      email: firebaseUser.email,
-      name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
-      role: 'Loading...'
-    };
-  }
-
-  // No user at all
-  console.warn('getCurrentUser: No user authenticated');
-  return null;
+  return currentUser;
 }
 
 // Check if user has permission
