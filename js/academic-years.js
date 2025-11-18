@@ -21,19 +21,31 @@ let academicYears = [];
 // Load all academic years
 export async function loadAcademicYears() {
   try {
+    console.log('Loading academic years from collection: academicYears');
     const q = query(
-      collection(db, 'academicYears'),
+      collection(db, 'academicYears')
     );
 
+    console.log('Executing Firestore query for academicYears...');
     const snapshot = await getDocs(q);
-    academicYears = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    console.log('Query completed. Documents found:', snapshot.size);
 
+    academicYears = snapshot.docs.map(doc => {
+      const data = doc.data();
+      console.log('Academic year document:', doc.id, data);
+      return {
+        id: doc.id,
+        ...data
+      };
+    });
+
+    console.log('Academic years loaded successfully:', academicYears.length);
     return academicYears;
   } catch (error) {
-    console.error('Error loading academic years:', error);
+    console.error('Error loading academic years from Firestore:', error);
+    console.error('Error code:', error.code);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
     throw error;
   }
 }
