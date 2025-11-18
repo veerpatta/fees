@@ -596,9 +596,515 @@ window.deleteFeeCategory = async (categoryId) => {
   }
 };
 
+// Render Reports View
+export async function renderReportsView() {
+  if (!currentAcademicYear) {
+    showAlert('Please select an academic year first', 'warning');
+    return;
+  }
+
+  const container = document.getElementById('reportsView');
+
+  const today = formatDateForInput(new Date());
+  const firstDay = formatDateForInput(new Date(new Date().getFullYear(), 0, 1));
+
+  container.innerHTML = `
+    <div class="reports-container">
+      <h3>Reports & Analytics</h3>
+
+      <!-- Collection Report -->
+      <div class="table-container">
+        <div class="table-header">
+          <h3 class="table-title">📊 Collection Report</h3>
+        </div>
+        <div style="padding: 20px;">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Start Date</label>
+              <input type="date" id="collectionStartDate" class="form-control" value="${firstDay}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">End Date</label>
+              <input type="date" id="collectionEndDate" class="form-control" value="${today}">
+            </div>
+          </div>
+          <div class="table-actions" style="margin-top: 15px;">
+            <button class="btn btn-primary" id="generateCollectionReportBtn">
+              📈 Generate Report
+            </button>
+            <button class="btn btn-outline" id="exportCollectionCSVBtn" disabled>
+              📥 Export CSV
+            </button>
+            <button class="btn btn-outline" id="exportCollectionPDFBtn" disabled>
+              📄 Export PDF
+            </button>
+          </div>
+          <div id="collectionReportResults" style="margin-top: 20px;"></div>
+        </div>
+      </div>
+
+      <!-- Pending Dues Report -->
+      <div class="table-container" style="margin-top: 20px;">
+        <div class="table-header">
+          <h3 class="table-title">⏰ Pending Dues Report</h3>
+        </div>
+        <div style="padding: 20px;">
+          <div class="table-actions">
+            <button class="btn btn-primary" id="generatePendingReportBtn">
+              📋 Generate Report
+            </button>
+            <button class="btn btn-outline" id="exportPendingCSVBtn" disabled>
+              📥 Export CSV
+            </button>
+          </div>
+          <div id="pendingReportResults" style="margin-top: 20px;"></div>
+        </div>
+      </div>
+
+      <!-- Class-wise Summary -->
+      <div class="table-container" style="margin-top: 20px;">
+        <div class="table-header">
+          <h3 class="table-title">🎓 Class-wise Summary</h3>
+        </div>
+        <div style="padding: 20px;">
+          <div class="table-actions">
+            <button class="btn btn-primary" id="generateClasswiseReportBtn">
+              📊 Generate Report
+            </button>
+            <button class="btn btn-outline" id="exportClasswiseCSVBtn" disabled>
+              📥 Export CSV
+            </button>
+          </div>
+          <div id="classwiseReportResults" style="margin-top: 20px;"></div>
+        </div>
+      </div>
+
+      <!-- Daily Collection -->
+      <div class="table-container" style="margin-top: 20px;">
+        <div class="table-header">
+          <h3 class="table-title">📅 Daily Collection Report</h3>
+        </div>
+        <div style="padding: 20px;">
+          <div class="form-group" style="max-width: 300px;">
+            <label class="form-label">Select Date</label>
+            <input type="date" id="dailyReportDate" class="form-control" value="${today}">
+          </div>
+          <div class="table-actions" style="margin-top: 15px;">
+            <button class="btn btn-primary" id="generateDailyReportBtn">
+              📅 Generate Report
+            </button>
+          </div>
+          <div id="dailyReportResults" style="margin-top: 20px;"></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Load reports module dynamically
+  const {
+    generateCollectionReport,
+    generatePendingDuesReport,
+    generateClasswiseReport,
+    generateDailyReport,
+    exportCollectionReportCSV,
+    exportPendingDuesCSV,
+    exportClasswiseCSV,
+    generateCollectionReportPDF
+  } = await import('./reports.js');
+
+  let collectionReportData = null;
+  let pendingReportData = null;
+  let classwiseReportData = null;
+
+  // Collection Report
+  document.getElementById('generateCollectionReportBtn').addEventListener('click', async () => {
+    try {
+      const startDate = document.getElementById('collectionStartDate').value;
+      const endDate = document.getElementById('collectionEndDate').value;
+
+      collectionReportData = await generateCollectionReport(currentAcademicYear, startDate, endDate);
+
+      // Display results
+      const resultsDiv = document.getElementById('collectionReportResults');
+      resultsDiv.innerHTML = `
+        <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+          <div class="stat-card success">
+            <h4>Total Collection</h4>
+            <p class="stat-value">${formatCurrency(collectionReportData.summary.totalCollection)}</p>
+          </div>
+          <div class="stat-card">
+            <h4>Transactions</h4>
+            <p class="stat-value">${collectionReportData.summary.totalTransactions}</p>
+          </div>
+          <div class="stat-card">
+            <h4>Cash</h4>
+            <p class="stat-value">${formatCurrency(collectionReportData.byMode.cash || 0)}</p>
+          </div>
+          <div class="stat-card">
+            <h4>Online</h4>
+            <p class="stat-value">${formatCurrency(collectionReportData.byMode.online || 0)}</p>
+          </div>
+          <div class="stat-card">
+            <h4>Cheque</h4>
+            <p class="stat-value">${formatCurrency(collectionReportData.byMode.cheque || 0)}</p>
+          </div>
+        </div>
+
+        <h4 style="margin-top: 20px;">Collection by Class</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Class</th>
+              <th>Transactions</th>
+              <th>Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${Object.entries(collectionReportData.byClass)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([cls, data]) => `
+                <tr>
+                  <td><strong>${cls}</strong></td>
+                  <td>${data.count}</td>
+                  <td>${formatCurrency(data.amount)}</td>
+                </tr>
+              `).join('')}
+          </tbody>
+        </table>
+      `;
+
+      // Enable export buttons
+      document.getElementById('exportCollectionCSVBtn').disabled = false;
+      document.getElementById('exportCollectionPDFBtn').disabled = false;
+
+      showAlert('Collection report generated successfully', 'success');
+    } catch (error) {
+      console.error('Error:', error);
+      showAlert('Failed to generate report: ' + error.message, 'error');
+    }
+  });
+
+  document.getElementById('exportCollectionCSVBtn').addEventListener('click', () => {
+    if (collectionReportData) {
+      exportCollectionReportCSV(collectionReportData);
+    }
+  });
+
+  document.getElementById('exportCollectionPDFBtn').addEventListener('click', async () => {
+    if (collectionReportData) {
+      try {
+        await generateCollectionReportPDF(collectionReportData);
+        showAlert('PDF downloaded successfully', 'success');
+      } catch (error) {
+        console.error('Error:', error);
+        showAlert('Failed to generate PDF', 'error');
+      }
+    }
+  });
+
+  // Pending Dues Report
+  document.getElementById('generatePendingReportBtn').addEventListener('click', async () => {
+    try {
+      pendingReportData = await generatePendingDuesReport(currentAcademicYear);
+
+      const resultsDiv = document.getElementById('pendingReportResults');
+      resultsDiv.innerHTML = `
+        <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+          <div class="stat-card warning">
+            <h4>Total Pending</h4>
+            <p class="stat-value">${formatCurrency(pendingReportData.summary.totalPending)}</p>
+          </div>
+          <div class="stat-card">
+            <h4>Students with Dues</h4>
+            <p class="stat-value">${pendingReportData.summary.totalStudents}</p>
+          </div>
+        </div>
+
+        <h4 style="margin-top: 20px;">Pending by Class</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Class</th>
+              <th>Students</th>
+              <th>Pending Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${Object.entries(pendingReportData.byClass)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([cls, data]) => `
+                <tr>
+                  <td><strong>${cls}</strong></td>
+                  <td>${data.count}</td>
+                  <td class="text-warning"><strong>${formatCurrency(data.amount)}</strong></td>
+                </tr>
+              `).join('')}
+          </tbody>
+        </table>
+
+        <h4 style="margin-top: 20px;">Top 10 Students with Highest Dues</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>Student Name</th>
+              <th>Class</th>
+              <th>Contact</th>
+              <th>Pending Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${pendingReportData.students.slice(0, 10).map(student => `
+              <tr>
+                <td><strong>${student.name}</strong></td>
+                <td>${student.class}</td>
+                <td>${student.contactNumber || 'N/A'}</td>
+                <td class="text-warning"><strong>${formatCurrency(student.pendingAmount)}</strong></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+
+      document.getElementById('exportPendingCSVBtn').disabled = false;
+      showAlert('Pending dues report generated successfully', 'success');
+    } catch (error) {
+      console.error('Error:', error);
+      showAlert('Failed to generate report: ' + error.message, 'error');
+    }
+  });
+
+  document.getElementById('exportPendingCSVBtn').addEventListener('click', () => {
+    if (pendingReportData) {
+      exportPendingDuesCSV(pendingReportData);
+    }
+  });
+
+  // Class-wise Summary
+  document.getElementById('generateClasswiseReportBtn').addEventListener('click', async () => {
+    try {
+      classwiseReportData = await generateClasswiseReport(currentAcademicYear);
+
+      const resultsDiv = document.getElementById('classwiseReportResults');
+      resultsDiv.innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th>Class</th>
+              <th>Students</th>
+              <th>Total Fees</th>
+              <th>Collected</th>
+              <th>Pending</th>
+              <th>Collection %</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${Object.entries(classwiseReportData)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([cls, data]) => {
+                const percentage = data.totalFees > 0
+                  ? ((data.totalCollected / data.totalFees) * 100).toFixed(1)
+                  : 0;
+                return `
+                  <tr>
+                    <td><strong>${cls}</strong></td>
+                    <td>${data.studentCount}</td>
+                    <td>${formatCurrency(data.totalFees)}</td>
+                    <td class="text-success">${formatCurrency(data.totalCollected)}</td>
+                    <td class="text-warning">${formatCurrency(data.totalPending)}</td>
+                    <td><span class="badge ${percentage >= 75 ? 'badge-success' : percentage >= 50 ? 'badge-warning' : 'badge-danger'}">${percentage}%</span></td>
+                  </tr>
+                `;
+              }).join('')}
+          </tbody>
+        </table>
+      `;
+
+      document.getElementById('exportClasswiseCSVBtn').disabled = false;
+      showAlert('Class-wise report generated successfully', 'success');
+    } catch (error) {
+      console.error('Error:', error);
+      showAlert('Failed to generate report: ' + error.message, 'error');
+    }
+  });
+
+  document.getElementById('exportClasswiseCSVBtn').addEventListener('click', () => {
+    if (classwiseReportData) {
+      exportClasswiseCSV(classwiseReportData);
+    }
+  });
+
+  // Daily Report
+  document.getElementById('generateDailyReportBtn').addEventListener('click', async () => {
+    try {
+      const date = document.getElementById('dailyReportDate').value;
+      const dailyData = await generateDailyReport(currentAcademicYear, date);
+
+      const resultsDiv = document.getElementById('dailyReportResults');
+      resultsDiv.innerHTML = `
+        <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+          <div class="stat-card success">
+            <h4>Total Collection</h4>
+            <p class="stat-value">${formatCurrency(dailyData.totalCollection)}</p>
+          </div>
+          <div class="stat-card">
+            <h4>Transactions</h4>
+            <p class="stat-value">${dailyData.totalTransactions}</p>
+          </div>
+          <div class="stat-card">
+            <h4>Cash</h4>
+            <p class="stat-value">${formatCurrency(dailyData.byMode.cash || 0)}</p>
+          </div>
+          <div class="stat-card">
+            <h4>Online</h4>
+            <p class="stat-value">${formatCurrency(dailyData.byMode.online || 0)}</p>
+          </div>
+          <div class="stat-card">
+            <h4>Cheque</h4>
+            <p class="stat-value">${formatCurrency(dailyData.byMode.cheque || 0)}</p>
+          </div>
+        </div>
+
+        ${dailyData.payments.length > 0 ? `
+          <h4 style="margin-top: 20px;">Transactions for ${formatDate(dailyData.date)}</h4>
+          <table>
+            <thead>
+              <tr>
+                <th>Receipt No</th>
+                <th>Student</th>
+                <th>Class</th>
+                <th>Amount</th>
+                <th>Mode</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${dailyData.payments.map(payment => `
+                <tr>
+                  <td><strong>${payment.receiptNumber}</strong></td>
+                  <td>${payment.studentName}</td>
+                  <td>${payment.studentClass}</td>
+                  <td>${formatCurrency(payment.amount)}</td>
+                  <td><span class="badge badge-info">${payment.paymentMode?.toUpperCase()}</span></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        ` : '<p class="text-secondary">No transactions for this date</p>'}
+      `;
+
+      showAlert('Daily report generated successfully', 'success');
+    } catch (error) {
+      console.error('Error:', error);
+      showAlert('Failed to generate report: ' + error.message, 'error');
+    }
+  });
+}
+
+// Render Bulk Upload View
+export async function renderBulkUploadView() {
+  if (!currentAcademicYear) {
+    showAlert('Please select an academic year first', 'warning');
+    return;
+  }
+
+  const container = document.getElementById('bulkUploadView');
+
+  container.innerHTML = `
+    <div class="table-container">
+      <div class="table-header">
+        <h3 class="table-title">📁 Bulk Upload Students</h3>
+      </div>
+      <div style="padding: 20px;">
+        <div class="info-box" style="background: var(--bg-tertiary); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+          <h4 style="margin-top: 0;">📋 Instructions</h4>
+          <ol style="margin: 10px 0;">
+            <li>Download the sample CSV template</li>
+            <li>Fill in student details</li>
+            <li>Upload the CSV file</li>
+            <li>Review and confirm</li>
+          </ol>
+        </div>
+
+        <div class="table-actions" style="margin-bottom: 20px;">
+          <button class="btn btn-outline" id="downloadTemplateBtn">
+            📥 Download Template
+          </button>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Select CSV File</label>
+          <input type="file" id="csvFileInput" class="form-control" accept=".csv" style="max-width: 400px;">
+        </div>
+
+        <div id="uploadResults" style="margin-top: 20px;"></div>
+      </div>
+    </div>
+  `;
+
+  // Load bulk upload module
+  const { parseCSVFile, validateBulkStudents, uploadBulkStudents, generateSampleCSV } = await import('./bulk-upload.js');
+  const { loadFeeStructure } = await import('./fee-structure.js');
+
+  let validatedData = null;
+  let feeStructure = null;
+
+  document.getElementById('downloadTemplateBtn').addEventListener('click', () => {
+    generateSampleCSV();
+    showAlert('Template downloaded', 'success');
+  });
+
+  document.getElementById('csvFileInput').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      showLoading(true, 'Parsing CSV...');
+      const { students } = await parseCSVFile(file);
+      feeStructure = await loadFeeStructure(currentAcademicYear);
+      validatedData = validateBulkStudents(students, currentAcademicYear);
+      showLoading(false);
+
+      const resultsDiv = document.getElementById('uploadResults');
+      resultsDiv.innerHTML = `
+        <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 20px;">
+          <div class="stat-card"><h4>Total</h4><p class="stat-value">${validatedData.summary.total}</p></div>
+          <div class="stat-card success"><h4>Valid</h4><p class="stat-value">${validatedData.summary.valid}</p></div>
+          <div class="stat-card danger"><h4>Invalid</h4><p class="stat-value">${validatedData.summary.invalid}</p></div>
+        </div>
+
+        ${validatedData.summary.valid > 0 ? `
+          <button class="btn btn-success btn-lg" id="uploadStudentsBtn">
+            ✅ Upload ${validatedData.summary.valid} Students
+          </button>
+        ` : '<p class="text-danger">Fix validation errors before uploading</p>'}
+      `;
+
+      if (validatedData.summary.valid > 0) {
+        document.getElementById('uploadStudentsBtn').addEventListener('click', async () => {
+          if (!confirm(`Upload ${validatedData.summary.valid} students?`)) return;
+
+          try {
+            const result = await uploadBulkStudents(validatedData, currentAcademicYear, feeStructure);
+            showAlert(`Uploaded ${result.summary.successful} students successfully`, 'success');
+            setTimeout(() => window.location.reload(), 2000);
+          } catch (error) {
+            showAlert('Upload failed: ' + error.message, 'error');
+          }
+        });
+      }
+
+      showAlert('CSV parsed successfully', 'success');
+    } catch (error) {
+      showAlert('Failed to parse CSV: ' + error.message, 'error');
+      showLoading(false);
+    }
+  });
+}
+
 // Export all rendering functions
 export default {
   renderAcademicYearsView,
   renderFeeStructureView,
+  renderReportsView,
+  renderBulkUploadView,
   setGlobalAcademicYear
 };

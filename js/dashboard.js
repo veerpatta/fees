@@ -13,6 +13,8 @@ import { loadAcademicYears, getActiveAcademicYear } from './academic-years.js';
 import {
   renderAcademicYearsView,
   renderFeeStructureView,
+  renderReportsView,
+  renderBulkUploadView,
   setGlobalAcademicYear
 } from './dashboard-views.js';
 import { showStudentForm, showPaymentForm, setCurrentAcademicYear } from './forms.js';
@@ -603,15 +605,7 @@ async function loadPaymentsView() {
 }
 
 // Placeholder views
-function renderBulkUploadView() {
-  const container = document.getElementById('bulkUploadView');
-  container.innerHTML = `
-    <div class="table-container">
-      <h3>Bulk Upload Students</h3>
-      <p class="text-secondary">This feature is coming soon. You can add students individually for now.</p>
-    </div>
-  `;
-}
+// renderBulkUploadView is now imported from dashboard-views.js
 
 function renderPromoCodesView() {
   const container = document.getElementById('promoCodesView');
@@ -623,15 +617,7 @@ function renderPromoCodesView() {
   `;
 }
 
-function renderReportsView() {
-  const container = document.getElementById('reportsView');
-  container.innerHTML = `
-    <div class="table-container">
-      <h3>Reports & Analytics</h3>
-      <p class="text-secondary">This feature is coming soon.</p>
-    </div>
-  `;
-}
+// renderReportsView is now imported from dashboard-views.js
 
 function renderAuditLogsView() {
   const container = document.getElementById('auditLogsView');
