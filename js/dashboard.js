@@ -62,27 +62,47 @@ async function initDashboard() {
     }
 
     // Load academic years (with empty state handling)
+    let hasActiveAcademicYear = false;
+    let academicYearAlertShown = false;
+
     try {
       console.log('initDashboard: Loading academic years...');
-      await populateAcademicYears();
+      const activeYearId = await populateAcademicYears();
+      hasActiveAcademicYear = Boolean(activeYearId);
       console.log('initDashboard: Academic years loaded');
     } catch (error) {
       console.error('initDashboard: Error loading academic years:', error);
       // Don't block - just show placeholder in dropdown
       const yearSelect = document.getElementById('academicYear');
       if (yearSelect) {
-        yearSelect.innerHTML = '<option value="">No academic years - Create one to begin</option>';
+        yearSelect.innerHTML = '<option value="">Cannot read academic years - Contact admin</option>';
       }
+
+      showAlert(
+        'Cannot read academic years. Please contact an admin to create an academic year or fix your permissions.',
+        'error'
+      );
+      academicYearAlertShown = true;
     }
 
-    // Load dashboard data
-    try {
-      console.log('initDashboard: Loading dashboard data...');
-      await loadDashboardData();
-      console.log('initDashboard: Dashboard data loaded');
-    } catch (error) {
-      console.error('initDashboard: Error loading dashboard data:', error);
-      // Don't block the UI, just show empty dashboard
+    // Load dashboard data only when we have an active year
+    if (hasActiveAcademicYear && currentAcademicYear) {
+      try {
+        console.log('initDashboard: Loading dashboard data...');
+        await loadDashboardData();
+        console.log('initDashboard: Dashboard data loaded');
+      } catch (error) {
+        console.error('initDashboard: Error loading dashboard data:', error);
+        // Don't block the UI, just show empty dashboard
+      }
+    } else {
+      console.warn('initDashboard: Skipping dashboard data load because no active academic year is available');
+      if (!academicYearAlertShown) {
+        showAlert(
+          'Cannot read academic years. Please contact an admin to create an academic year or fix your permissions.',
+          'warning'
+        );
+      }
     }
 
     // Setup event listeners
@@ -145,7 +165,7 @@ function updateUserInfo() {
 // Load academic years and populate dropdown
 async function populateAcademicYears() {
   console.log('populateAcademicYears: Starting...');
-  
+
   try {
     academicYears = await loadAcademicYears();
     console.log('populateAcademicYears: Loaded', academicYears?.length || 0, 'academic years');
@@ -161,17 +181,28 @@ async function populateAcademicYears() {
 
     if (!academicYears || academicYears.length === 0) {
       console.warn('populateAcademicYears: No academic years found');
-      yearSelect.innerHTML = '<option value="">No academic years - Create one to begin</option>';
-      
-      // Only show alert to principals who can create academic years
-      if (isPrincipal()) {
-        showAlert('Please create an academic year first. Go to Academic Years to create one.', 'warning');
-      }
-      return; // Return successfully even though no years exist
+      yearSelect.innerHTML = '<option value="">No academic years - Contact admin</option>';
+
+      showAlert(
+        'Cannot read academic years. Please contact an admin to create an academic year or fix your permissions.',
+        'warning'
+      );
+      return null; // Return successfully even though no years exist
     }
 
     // Find current/active year
     const activeYear = getActiveAcademicYear() || academicYears[0];
+
+    if (!activeYear || !activeYear.id) {
+      console.error('populateAcademicYears: Unable to determine an active academic year');
+      yearSelect.innerHTML = '<option value="">No active academic year - Contact admin</option>';
+      showAlert(
+        'Cannot read academic years. Please contact an admin to create an academic year or fix your permissions.',
+        'error'
+      );
+      return null;
+    }
+
     currentAcademicYear = activeYear.id;
     console.log('populateAcademicYears: Active academic year:', activeYear.name);
 
@@ -189,15 +220,22 @@ async function populateAcademicYears() {
     });
 
     console.log('populateAcademicYears: Successfully populated dropdown');
+    return currentAcademicYear;
   } catch (error) {
     console.error('populateAcademicYears: Error loading academic years:', error);
-    
+
     // Set placeholder in dropdown even on error
     const yearSelect = document.getElementById('academicYear');
     if (yearSelect) {
-      yearSelect.innerHTML = '<option value="">Error loading years - Please refresh</option>';
+      yearSelect.innerHTML = '<option value="">Cannot read academic years - Contact admin</option>';
     }
-    
+
+    const friendlyMessage = error?.code === 'permission-denied'
+      ? 'Cannot read academic years due to insufficient permissions. Please contact an admin to grant access.'
+      : 'Cannot read academic years. Please contact an admin to create an academic year or fix your permissions.';
+
+    showAlert(friendlyMessage, 'error');
+
     // Re-throw to let caller handle
     throw error;
   }
