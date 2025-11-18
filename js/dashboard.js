@@ -29,62 +29,110 @@ let academicYears = [];
 
 // Initialize dashboard
 async function initDashboard() {
+  console.log('initDashboard: Starting dashboard initialization');
+  
+  // Add a 10-second timeout failsafe
+  const timeoutId = setTimeout(() => {
+    console.error('initDashboard: Initialization timeout after 10 seconds');
+    showLoading(false);
+    showAlert('Dashboard initialization took too long. Please refresh the page.', 'warning');
+  }, 10000);
+
   try {
     showLoading(true);
 
     // Check authentication
+    console.log('initDashboard: Checking authentication...');
     currentUser = await checkAuth(['principal', 'staff']);
+    console.log('initDashboard: Authentication successful', currentUser?.email);
 
     // Update UI with user info (with fallback)
     try {
+      console.log('initDashboard: Updating user info...');
       updateUserInfo();
+      console.log('initDashboard: User info updated');
     } catch (error) {
-      console.error('Error loading user info:', error);
-      // Show basic info from Firebase Auth as fallback
-      const user = await getCurrentUser();
-      document.getElementById('userName').textContent = user?.email || 'User';
-      document.getElementById('userRole').textContent = user?.role || 'Loading...';
+      console.error('initDashboard: Error updating user info:', error);
+      // Show basic info from getCurrentUser as fallback
+      const user = getCurrentUser();
+      const userNameEl = document.getElementById('userName');
+      const userRoleEl = document.getElementById('userRole');
+      if (userNameEl && user) userNameEl.textContent = user.name || user.email || 'User';
+      if (userRoleEl && user) userRoleEl.textContent = user.role || 'staff';
     }
 
     // Load academic years (with empty state handling)
     try {
+      console.log('initDashboard: Loading academic years...');
       await populateAcademicYears();
+      console.log('initDashboard: Academic years loaded');
     } catch (error) {
-      console.error('Error loading academic years:', error);
-      showAlert('Failed to load academic years. Please try refreshing the page.', 'error');
+      console.error('initDashboard: Error loading academic years:', error);
+      // Don't block - just show placeholder in dropdown
+      const yearSelect = document.getElementById('academicYear');
+      if (yearSelect) {
+        yearSelect.innerHTML = '<option value="">No academic years - Create one to begin</option>';
+      }
     }
 
     // Load dashboard data
     try {
+      console.log('initDashboard: Loading dashboard data...');
       await loadDashboardData();
+      console.log('initDashboard: Dashboard data loaded');
     } catch (error) {
-      console.error('Error loading dashboard data:', error);
+      console.error('initDashboard: Error loading dashboard data:', error);
       // Don't block the UI, just show empty dashboard
     }
 
     // Setup event listeners
+    console.log('initDashboard: Setting up event listeners...');
     setupEventListeners();
+    console.log('initDashboard: Initialization complete');
 
   } catch (error) {
-    console.error('Dashboard initialization error:', error);
+    console.error('initDashboard: Critical initialization error:', error);
     showAlert('Failed to load dashboard. Please refresh the page or contact support.', 'error');
 
     // If critical auth error, redirect to login
     if (error.message?.includes('Not authenticated') || error.message?.includes('Unauthorized')) {
+      console.log('initDashboard: Redirecting to login page due to auth error');
       setTimeout(() => {
         window.location.href = 'index.html';
       }, 2000);
     }
   } finally {
-    // ALWAYS remove loading state, even if errors occurred
+    // Clear timeout and ALWAYS remove loading state, even if errors occurred
+    clearTimeout(timeoutId);
+    console.log('initDashboard: Removing loading overlay');
     showLoading(false);
   }
 }
 
 // Update user info in sidebar
 function updateUserInfo() {
-  document.getElementById('userName').textContent = currentUser.name;
-  document.getElementById('userRole').textContent = currentUser.role;
+  const userNameEl = document.getElementById('userName');
+  const userRoleEl = document.getElementById('userRole');
+
+  // Defensive checks for DOM elements
+  if (!userNameEl || !userRoleEl) {
+    console.error('updateUserInfo: User info elements not found in DOM');
+    return;
+  }
+
+  // Defensive checks for currentUser
+  if (!currentUser) {
+    console.warn('updateUserInfo: currentUser is null, attempting to get current user');
+    currentUser = getCurrentUser();
+  }
+
+  if (currentUser) {
+    userNameEl.textContent = currentUser.name || currentUser.email || 'User';
+    userRoleEl.textContent = currentUser.role || 'staff';
+  } else {
+    userNameEl.textContent = 'User';
+    userRoleEl.textContent = 'Loading...';
+  }
 
   // Show/hide principal-only items
   if (isPrincipal()) {
@@ -96,24 +144,36 @@ function updateUserInfo() {
 
 // Load academic years and populate dropdown
 async function populateAcademicYears() {
+  console.log('populateAcademicYears: Starting...');
+  
   try {
     academicYears = await loadAcademicYears();
+    console.log('populateAcademicYears: Loaded', academicYears?.length || 0, 'academic years');
 
     // Populate academic year dropdown
     const yearSelect = document.getElementById('academicYear');
+    if (!yearSelect) {
+      console.error('populateAcademicYears: academicYear dropdown element not found');
+      return;
+    }
+
     yearSelect.innerHTML = '';
 
-    if (academicYears.length === 0) {
-      yearSelect.innerHTML = '<option value="">No academic years found</option>';
+    if (!academicYears || academicYears.length === 0) {
+      console.warn('populateAcademicYears: No academic years found');
+      yearSelect.innerHTML = '<option value="">No academic years - Create one to begin</option>';
+      
+      // Only show alert to principals who can create academic years
       if (isPrincipal()) {
         showAlert('Please create an academic year first. Go to Academic Years to create one.', 'warning');
       }
-      return;
+      return; // Return successfully even though no years exist
     }
 
     // Find current/active year
     const activeYear = getActiveAcademicYear() || academicYears[0];
     currentAcademicYear = activeYear.id;
+    console.log('populateAcademicYears: Active academic year:', activeYear.name);
 
     // Set globally
     setGlobalAcademicYear(currentAcademicYear);
@@ -127,15 +187,30 @@ async function populateAcademicYears() {
       }
       yearSelect.appendChild(option);
     });
+
+    console.log('populateAcademicYears: Successfully populated dropdown');
   } catch (error) {
-    console.error('Error loading academic years:', error);
-    showAlert('Failed to load academic years', 'error');
+    console.error('populateAcademicYears: Error loading academic years:', error);
+    
+    // Set placeholder in dropdown even on error
+    const yearSelect = document.getElementById('academicYear');
+    if (yearSelect) {
+      yearSelect.innerHTML = '<option value="">Error loading years - Please refresh</option>';
+    }
+    
+    // Re-throw to let caller handle
+    throw error;
   }
 }
 
 // Load dashboard data
 async function loadDashboardData() {
-  if (!currentAcademicYear) return;
+  if (!currentAcademicYear) {
+    console.log('loadDashboardData: No academic year selected, skipping data load');
+    return;
+  }
+
+  console.log('loadDashboardData: Loading data for academic year:', currentAcademicYear);
 
   try {
     // Load statistics
@@ -146,14 +221,18 @@ async function loadDashboardData() {
 
     // Load pending payments
     await loadPendingPayments();
+
+    console.log('loadDashboardData: All data loaded successfully');
   } catch (error) {
-    console.error('Error loading dashboard data:', error);
-    showAlert('Failed to load dashboard data', 'error');
+    console.error('loadDashboardData: Error loading dashboard data:', error);
+    // Don't show alert here - let individual functions handle it
   }
 }
 
 // Load statistics
 async function loadStatistics() {
+  console.log('loadStatistics: Starting...');
+  
   try {
     // Get total students for current year
     const studentsQuery = query(
@@ -163,7 +242,10 @@ async function loadStatistics() {
     const studentsSnapshot = await getDocs(studentsQuery);
     const students = studentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-    document.getElementById('totalStudents').textContent = students.length;
+    const totalStudentsEl = document.getElementById('totalStudents');
+    if (totalStudentsEl) {
+      totalStudentsEl.textContent = students.length;
+    }
 
     // Calculate total fees, collected, and pending
     let totalFees = 0;
@@ -178,8 +260,10 @@ async function loadStatistics() {
       totalPending += (fees - paid);
     });
 
-    document.getElementById('totalCollected').textContent = formatCurrency(totalCollected);
-    document.getElementById('totalPending').textContent = formatCurrency(totalPending);
+    const totalCollectedEl = document.getElementById('totalCollected');
+    const totalPendingEl = document.getElementById('totalPending');
+    if (totalCollectedEl) totalCollectedEl.textContent = formatCurrency(totalCollected);
+    if (totalPendingEl) totalPendingEl.textContent = formatCurrency(totalPending);
 
     // Get today's collection
     const today = new Date();
@@ -194,11 +278,26 @@ async function loadStatistics() {
     const todayPayments = paymentsSnapshot.docs.map(doc => doc.data());
 
     const todayTotal = todayPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
-    document.getElementById('todayCollection').textContent = formatCurrency(todayTotal);
-    document.getElementById('todayPaymentsCount').textContent =
-      `${todayPayments.length} payment${todayPayments.length !== 1 ? 's' : ''} today`;
+    
+    const todayCollectionEl = document.getElementById('todayCollection');
+    const todayPaymentsCountEl = document.getElementById('todayPaymentsCount');
+    if (todayCollectionEl) todayCollectionEl.textContent = formatCurrency(todayTotal);
+    if (todayPaymentsCountEl) {
+      todayPaymentsCountEl.textContent = `${todayPayments.length} payment${todayPayments.length !== 1 ? 's' : ''} today`;
+    }
+
+    console.log('loadStatistics: Statistics loaded successfully');
   } catch (error) {
-    console.error('Error loading statistics:', error);
+    console.error('loadStatistics: Error loading statistics:', error);
+    // Set default values to prevent empty display
+    const totalStudentsEl = document.getElementById('totalStudents');
+    const totalCollectedEl = document.getElementById('totalCollected');
+    const totalPendingEl = document.getElementById('totalPending');
+    const todayCollectionEl = document.getElementById('todayCollection');
+    if (totalStudentsEl) totalStudentsEl.textContent = '0';
+    if (totalCollectedEl) totalCollectedEl.textContent = formatCurrency(0);
+    if (totalPendingEl) totalPendingEl.textContent = formatCurrency(0);
+    if (todayCollectionEl) todayCollectionEl.textContent = formatCurrency(0);
   }
 }
 
