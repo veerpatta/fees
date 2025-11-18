@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - VPPS Fee Management</title>
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+  <div class="dashboard-wrapper">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">🏫</div>
+        <h2>VPPS</h2>
+        <p>Fee Management</p>
+      </div>
+
+      <div class="user-info">
+        <div class="user-avatar" id="userAvatar">👤</div>
+        <div class="user-details">
+          <h4 id="userName">Loading...</h4>
+          <p id="userRole">...</p>
+        </div>
+      </div>
+
+      <nav class="nav-menu" id="navMenu">
+        <a href="#" class="nav-item active" data-view="dashboard">
+          <span>📊</span> Dashboard
+        </a>
+        <a href="#" class="nav-item" data-view="students">
+          <span>👨‍🎓</span> Students
+        </a>
+        <a href="#" class="nav-item" data-view="payments">
+          <span>💰</span> Payments
+        </a>
+        <a href="#" class="nav-item" data-view="reports">
+          <span>📈</span> Reports
+        </a>
+        <a href="#" class="nav-item principal-only hidden" data-view="bulk-upload">
+          <span>📁</span> Bulk Upload
+        </a>
+        <a href="#" class="nav-item principal-only hidden" data-view="promo-codes">
+          <span>🎟️</span> Promo Codes
+        </a>
+        <a href="#" class="nav-item principal-only hidden" data-view="fee-structure">
+          <span>⚙️</span> Fee Structure
+        </a>
+        <a href="#" class="nav-item principal-only hidden" data-view="academic-years">
+          <span>📅</span> Academic Years
+        </a>
+        <a href="#" class="nav-item principal-only hidden" data-view="audit-logs">
+          <span>📋</span> Audit Logs
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button class="btn btn-logout" id="logoutBtn">
+          🚪 Logout
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Top Bar -->
+      <div class="topbar">
+        <h1 class="page-title" id="pageTitle">Dashboard</h1>
+        <div class="topbar-actions">
+          <div class="year-selector">
+            <label for="academicYear">Academic Year:</label>
+            <select id="academicYear">
+              <option value="">Loading...</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alert Container -->
+      <div id="alertContainer"></div>
+
+      <!-- Dashboard View -->
+      <div id="dashboardView" class="view-content">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-header">
+              <h3 class="stat-title">Total Students</h3>
+              <span class="stat-icon">👨‍🎓</span>
+            </div>
+            <p class="stat-value" id="totalStudents">0</p>
+            <div class="stat-footer">
+              <p class="stat-label">Active in current year</p>
+            </div>
+          </div>
+
+          <div class="stat-card success">
+            <div class="stat-header">
+              <h3 class="stat-title">Total Collected</h3>
+              <span class="stat-icon">💰</span>
+            </div>
+            <p class="stat-value" id="totalCollected">₹0</p>
+            <div class="stat-footer">
+              <p class="stat-label">In current academic year</p>
+            </div>
+          </div>
+
+          <div class="stat-card warning">
+            <div class="stat-header">
+              <h3 class="stat-title">Pending Dues</h3>
+              <span class="stat-icon">⏰</span>
+            </div>
+            <p class="stat-value" id="totalPending">₹0</p>
+            <div class="stat-footer">
+              <p class="stat-label">Outstanding payments</p>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-header">
+              <h3 class="stat-title">Today's Collection</h3>
+              <span class="stat-icon">📅</span>
+            </div>
+            <p class="stat-value" id="todayCollection">₹0</p>
+            <div class="stat-footer">
+              <p class="stat-label" id="todayPaymentsCount">0 payments today</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Payments -->
+        <div class="table-container">
+          <div class="table-header">
+            <h3 class="table-title">Recent Payments</h3>
+            <div class="table-actions">
+              <button class="btn btn-primary btn-sm" id="addPaymentBtn">
+                ➕ New Payment
+              </button>
+            </div>
+          </div>
+          <div id="recentPaymentsTable">
+            <div class="empty-state">
+              <div class="empty-state-icon">💳</div>
+              <h3>No Payments Yet</h3>
+              <p>Recent payments will appear here</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pending Payments -->
+        <div class="table-container">
+          <div class="table-header">
+            <h3 class="table-title">Students with Pending Dues</h3>
+            <div class="table-actions">
+              <div class="search-box">
+                <input type="text" id="searchPending" placeholder="Search students...">
+              </div>
+            </div>
+          </div>
+          <div id="pendingPaymentsTable">
+            <div class="empty-state">
+              <div class="empty-state-icon">✅</div>
+              <h3>All Paid Up!</h3>
+              <p>No pending payments</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Students View -->
+      <div id="studentsView" class="view-content hidden">
+        <div class="table-container">
+          <div class="table-header">
+            <h3 class="table-title">Student Management</h3>
+            <div class="table-actions">
+              <div class="search-box">
+                <input type="text" id="searchStudents" placeholder="Search students...">
+              </div>
+              <button class="btn btn-primary btn-sm" id="addStudentBtn">
+                ➕ Add Student
+              </button>
+            </div>
+          </div>
+          <div id="studentsTable">
+            <div class="empty-state">
+              <div class="empty-state-icon">👨‍🎓</div>
+              <h3>No Students Yet</h3>
+              <p>Add students to get started</p>
+              <button class="btn btn-primary mt-2" id="addStudentBtnEmpty">
+                Add First Student
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Payments View -->
+      <div id="paymentsView" class="view-content hidden">
+        <div class="table-container">
+          <div class="table-header">
+            <h3 class="table-title">Payment History</h3>
+            <div class="table-actions">
+              <div class="search-box">
+                <input type="text" id="searchPayments" placeholder="Search payments...">
+              </div>
+              <select id="filterPaymentMode" class="form-control" style="width: auto;">
+                <option value="">All Modes</option>
+                <option value="cash">Cash</option>
+                <option value="online">Online</option>
+                <option value="cheque">Cheque</option>
+              </select>
+            </div>
+          </div>
+          <div id="paymentsTable">
+            <div class="empty-state">
+              <div class="empty-state-icon">💳</div>
+              <h3>No Payments Yet</h3>
+              <p>Payment history will appear here</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reports View -->
+      <div id="reportsView" class="view-content hidden">
+        <h3>Reports & Analytics</h3>
+        <p class="text-secondary">Reports module will be available here</p>
+      </div>
+
+      <!-- Other views placeholders -->
+      <div id="bulkUploadView" class="view-content hidden">
+        <h3>Bulk Upload Students</h3>
+        <p class="text-secondary">Bulk upload module will be available here</p>
+      </div>
+
+      <div id="promoCodesView" class="view-content hidden">
+        <h3>Promo Codes</h3>
+        <p class="text-secondary">Promo codes management will be available here</p>
+      </div>
+
+      <div id="feeStructureView" class="view-content hidden">
+        <h3>Fee Structure</h3>
+        <p class="text-secondary">Fee structure configuration will be available here</p>
+      </div>
+
+      <div id="academicYearsView" class="view-content hidden">
+        <h3>Academic Years</h3>
+        <p class="text-secondary">Academic years management will be available here</p>
+      </div>
+
+      <div id="auditLogsView" class="view-content hidden">
+        <h3>Audit Logs</h3>
+        <p class="text-secondary">Audit logs will be available here</p>
+      </div>
+    </main>
+  </div>
+
+  <!-- Mobile Menu Toggle -->
+  <button class="mobile-menu-toggle" id="mobileMenuToggle">
+    ☰
+  </button>
+
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="loading-overlay hidden">
+    <div class="loading-content">
+      <div class="spinner-lg"></div>
+      <p>Loading...</p>
+    </div>
+  </div>
+
+  <script type="module" src="js/dashboard.js"></script>
+</body>
+</html>
