@@ -9,6 +9,19 @@ import {
   orderBy,
   limit
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+import { loadAcademicYears, getActiveAcademicYear } from './academic-years.js';
+import {
+  renderAcademicYearsView,
+  renderFeeStructureView,
+  renderReportsView,
+  renderBulkUploadView,
+  setGlobalAcademicYear
+} from './dashboard-views.js';
+import { showStudentForm, showPaymentForm, setCurrentAcademicYear } from './forms.js';
+import { getStudentsByYear } from './students.js';
+import { getPaymentsByYear } from './payments.js';
+import { formatCurrency, formatDate, showAlert, showLoading } from './utils.js';
+import { downloadReceipt } from './receipt.js';
 
 let currentUser = null;
 let currentAcademicYear = null;
@@ -26,7 +39,7 @@ async function initDashboard() {
     updateUserInfo();
 
     // Load academic years
-    await loadAcademicYears();
+    await populateAcademicYears();
 
     // Load dashboard data
     await loadDashboardData();
@@ -57,19 +70,10 @@ function updateUserInfo() {
   }
 }
 
-// Load academic years
-async function loadAcademicYears() {
+// Load academic years and populate dropdown
+async function populateAcademicYears() {
   try {
-    const yearsQuery = query(
-      collection(db, 'academicYears'),
-      orderBy('startDate', 'desc')
-    );
-
-    const snapshot = await getDocs(yearsQuery);
-    academicYears = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data()
-    }));
+    academicYears = await loadAcademicYears();
 
     // Populate academic year dropdown
     const yearSelect = document.getElementById('academicYear');
@@ -78,14 +82,17 @@ async function loadAcademicYears() {
     if (academicYears.length === 0) {
       yearSelect.innerHTML = '<option value="">No academic years found</option>';
       if (isPrincipal()) {
-        showAlert('Please create an academic year first', 'warning');
+        showAlert('Please create an academic year first. Go to Academic Years to create one.', 'warning');
       }
       return;
     }
 
     // Find current/active year
-    const activeYear = academicYears.find(y => y.isActive) || academicYears[0];
+    const activeYear = getActiveAcademicYear() || academicYears[0];
     currentAcademicYear = activeYear.id;
+
+    // Set globally
+    setGlobalAcademicYear(currentAcademicYear);
 
     academicYears.forEach(year => {
       const option = document.createElement('option');
@@ -333,6 +340,7 @@ function setupEventListeners() {
   // Academic year change
   document.getElementById('academicYear').addEventListener('change', async (e) => {
     currentAcademicYear = e.target.value;
+    setGlobalAcademicYear(currentAcademicYear);
     showLoading(true);
     await loadDashboardData();
     showLoading(false);
@@ -354,16 +362,16 @@ function setupEventListeners() {
 
   // Add payment button
   document.getElementById('addPaymentBtn')?.addEventListener('click', () => {
-    showAlert('Payment form will open here', 'info');
+    showAlert('Please select a student from the Students view or Pending Payments table', 'info');
   });
 
   // Add student button
   document.getElementById('addStudentBtn')?.addEventListener('click', () => {
-    showAlert('Student form will open here', 'info');
+    showStudentForm();
   });
 
   document.getElementById('addStudentBtnEmpty')?.addEventListener('click', () => {
-    showAlert('Student form will open here', 'info');
+    showStudentForm();
   });
 }
 
@@ -419,19 +427,206 @@ function switchView(view) {
     loadStudentsView();
   } else if (view === 'payments') {
     loadPaymentsView();
+  } else if (view === 'academic-years') {
+    renderAcademicYearsView();
+  } else if (view === 'fee-structure') {
+    renderFeeStructureView();
+  } else if (view === 'bulk-upload') {
+    renderBulkUploadView();
+  } else if (view === 'promo-codes') {
+    renderPromoCodesView();
+  } else if (view === 'reports') {
+    renderReportsView();
+  } else if (view === 'audit-logs') {
+    renderAuditLogsView();
   }
 }
 
 // Load students view
 async function loadStudentsView() {
-  // Placeholder - will be implemented
-  console.log('Loading students view...');
+  if (!currentAcademicYear) {
+    showAlert('Please select an academic year first', 'warning');
+    return;
+  }
+
+  const container = document.getElementById('studentsTable');
+
+  try {
+    showLoading(true, 'Loading students...');
+
+    const students = await getStudentsByYear(currentAcademicYear);
+
+    if (students.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">👨‍🎓</div>
+          <h3>No Students Yet</h3>
+          <p>Add students to get started</p>
+          <button class="btn btn-primary mt-2" onclick="window.addNewStudent()">
+            Add First Student
+          </button>
+        </div>
+      `;
+      showLoading(false);
+      return;
+    }
+
+    // Build table
+    let html = `
+      <table>
+        <thead>
+          <tr>
+            <th>Admission No.</th>
+            <th>Name</th>
+            <th>Class</th>
+            <th>Contact</th>
+            <th>Total Fees</th>
+            <th>Paid</th>
+            <th>Pending</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    students.forEach(student => {
+      const pending = (student.totalFees || 0) - (student.totalPaid || 0);
+      html += `
+        <tr>
+          <td>${student.admissionNumber || 'N/A'}</td>
+          <td><strong>${student.name || 'Unknown'}</strong></td>
+          <td>${student.class || 'N/A'} ${student.section || ''}</td>
+          <td>${student.contactNumber || 'N/A'}</td>
+          <td>${formatCurrency(student.totalFees)}</td>
+          <td>${formatCurrency(student.totalPaid || 0)}</td>
+          <td><strong class="${pending > 0 ? 'text-warning' : 'text-success'}">
+            ${formatCurrency(pending)}
+          </strong></td>
+          <td>
+            <div class="action-buttons">
+              ${pending > 0 ? `
+                <button class="btn btn-sm btn-primary" onclick="window.addPaymentForStudent('${student.id}')">
+                  💰 Pay
+                </button>
+              ` : ''}
+              <button class="btn btn-sm btn-outline" onclick="window.editStudent('${student.id}')">
+                ✏️ Edit
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    });
+
+    html += '</tbody></table>';
+    container.innerHTML = html;
+
+    showLoading(false);
+  } catch (error) {
+    console.error('Error loading students:', error);
+    showAlert('Failed to load students', 'error');
+    showLoading(false);
+  }
 }
 
 // Load payments view
 async function loadPaymentsView() {
-  // Placeholder - will be implemented
-  console.log('Loading payments view...');
+  if (!currentAcademicYear) {
+    showAlert('Please select an academic year first', 'warning');
+    return;
+  }
+
+  const container = document.getElementById('paymentsTable');
+
+  try {
+    showLoading(true, 'Loading payments...');
+
+    const payments = await getPaymentsByYear(currentAcademicYear);
+
+    if (payments.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">💳</div>
+          <h3>No Payments Yet</h3>
+          <p>Payment history will appear here</p>
+        </div>
+      `;
+      showLoading(false);
+      return;
+    }
+
+    // Build table
+    let html = `
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Receipt No.</th>
+            <th>Student</th>
+            <th>Class</th>
+            <th>Amount</th>
+            <th>Mode</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    payments.forEach(payment => {
+      const date = payment.paymentDate?.toDate?.() || new Date(payment.paymentDate);
+      html += `
+        <tr>
+          <td>${formatDate(date)}</td>
+          <td><strong>${payment.receiptNumber || 'N/A'}</strong></td>
+          <td>${payment.studentName || 'Unknown'}</td>
+          <td>${payment.studentClass || 'N/A'}</td>
+          <td>${formatCurrency(payment.amount)}</td>
+          <td><span class="badge badge-info">${payment.paymentMode?.toUpperCase() || 'N/A'}</span></td>
+          <td>
+            <div class="action-buttons">
+              <button class="btn btn-sm btn-outline" onclick="window.viewReceipt('${payment.id}')">
+                📄 Receipt
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    });
+
+    html += '</tbody></table>';
+    container.innerHTML = html;
+
+    showLoading(false);
+  } catch (error) {
+    console.error('Error loading payments:', error);
+    showAlert('Failed to load payments', 'error');
+    showLoading(false);
+  }
+}
+
+// Placeholder views
+// renderBulkUploadView is now imported from dashboard-views.js
+
+function renderPromoCodesView() {
+  const container = document.getElementById('promoCodesView');
+  container.innerHTML = `
+    <div class="table-container">
+      <h3>Promo Codes Management</h3>
+      <p class="text-secondary">This feature is coming soon.</p>
+    </div>
+  `;
+}
+
+// renderReportsView is now imported from dashboard-views.js
+
+function renderAuditLogsView() {
+  const container = document.getElementById('auditLogsView');
+  container.innerHTML = `
+    <div class="table-container">
+      <h3>Audit Logs</h3>
+      <p class="text-secondary">This feature is coming soon.</p>
+    </div>
+  `;
 }
 
 // Utility Functions
@@ -479,17 +674,33 @@ function showLoading(show) {
 }
 
 // Make functions globally available
-window.viewReceipt = (paymentId) => {
-  showAlert('Receipt viewer will open here', 'info');
+window.viewReceipt = async (paymentId) => {
+  try {
+    await downloadReceipt(paymentId);
+  } catch (error) {
+    console.error('Error downloading receipt:', error);
+    showAlert('Failed to download receipt', 'error');
+  }
 };
 
-window.addPayment = (studentId) => {
-  showAlert('Payment form will open here', 'info');
+window.addPayment = async (studentId) => {
+  await showPaymentForm(studentId);
 };
 
-window.viewStudent = (studentId) => {
-  showAlert('Student details will open here', 'info');
+window.addPaymentForStudent = async (studentId) => {
+  await showPaymentForm(studentId);
 };
+
+window.addNewStudent = () => {
+  showStudentForm();
+};
+
+window.editStudent = (studentId) => {
+  showStudentForm(studentId);
+};
+
+window.loadStudentsView = loadStudentsView;
+window.loadDashboardData = loadDashboardData;
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', initDashboard);
