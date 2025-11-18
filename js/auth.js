@@ -33,17 +33,25 @@ async function login(email, password) {
     const userDoc = await getDoc(doc(db, 'users', user.uid));
 
     if (!userDoc.exists()) {
-      throw new Error('User profile not found. Please contact administrator.');
+      // Fallback: Create basic user object for initial admin access
+      console.warn('login: User profile not found in Firestore, using fallback');
+      const fallbackRole = user.email === 'director@vpps.co.in' ? 'principal' : 'staff';
+      currentUser = {
+        uid: user.uid,
+        email: user.email,
+        role: fallbackRole,
+        name: user.displayName || user.email?.split('@')[0] || 'User'
+      };
+    } else {
+      const userData = userDoc.data();
+      currentUser = {
+        uid: user.uid,
+        email: user.email,
+        role: userData.role,
+        name: userData.name,
+        ...userData
+      };
     }
-
-    const userData = userDoc.data();
-    currentUser = {
-      uid: user.uid,
-      email: user.email,
-      role: userData.role,
-      name: userData.name,
-      ...userData
-    };
 
     // Log login activity
     await logAudit('login', {
@@ -92,10 +100,11 @@ function checkAuth(requiredRoles = []) {
         if (!userDoc.exists()) {
           // Fallback: Create basic user object from Firebase Auth
           console.warn('checkAuth: User profile not found in Firestore, using Firebase Auth data as fallback');
+          const fallbackRole = user.email === 'director@vpps.co.in' ? 'principal' : 'staff';
           currentUser = {
             uid: user.uid,
             email: user.email,
-            role: 'staff', // Default role when Firestore profile is missing
+            role: fallbackRole, // Principal for director@vpps.co.in, otherwise staff
             name: user.displayName || user.email?.split('@')[0] || 'User'
           };
 
@@ -128,10 +137,11 @@ function checkAuth(requiredRoles = []) {
       } catch (error) {
         console.error('checkAuth: Error loading user profile:', error);
         // Don't reject completely - provide fallback user
+        const fallbackRole = user.email === 'director@vpps.co.in' ? 'principal' : 'staff';
         currentUser = {
           uid: user.uid,
           email: user.email,
-          role: 'staff',
+          role: fallbackRole,
           name: user.displayName || user.email?.split('@')[0] || 'User'
         };
         resolve(currentUser);
