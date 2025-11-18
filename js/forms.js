@@ -2,14 +2,26 @@
 import { addStudent, updateStudent, getStudent, validateStudentData, checkAdmissionNumberExists } from './students.js';
 import { addPayment, validatePaymentData, getPaymentsByStudent } from './payments.js';
 import { downloadReceipt } from './receipt.js';
+import { loadFeeStructure, getClassFeeBreakdown } from './fee-structure.js';
 import { formatCurrency, formatDateForInput, showAlert, showLoading, sanitizeInput } from './utils.js';
 
 let currentAcademicYear = null;
 let currentEditingStudentId = null;
+let currentFeeStructure = null;
 
 // Set current academic year
-export function setCurrentAcademicYear(yearId) {
+export async function setCurrentAcademicYear(yearId) {
   currentAcademicYear = yearId;
+
+  // Load fee structure for this year
+  if (yearId) {
+    try {
+      currentFeeStructure = await loadFeeStructure(yearId);
+    } catch (error) {
+      console.error('Error loading fee structure:', error);
+      currentFeeStructure = null;
+    }
+  }
 }
 
 // Show student form modal
@@ -138,6 +150,14 @@ function getStudentFormHTML() {
 
 // Setup student form listeners
 function setupStudentFormListeners() {
+  // Auto-calculate fees based on class selection
+  const classSelect = document.getElementById('studentClass');
+  if (classSelect) {
+    classSelect.addEventListener('change', async () => {
+      await updateFeesFromStructure(classSelect.value);
+    });
+  }
+
   // Auto-calculate total fees
   const feeInputs = ['classFee', 'transportFee', 'otherFees'];
   feeInputs.forEach(id => {
@@ -146,6 +166,30 @@ function setupStudentFormListeners() {
       input.addEventListener('input', calculateTotalFees);
     }
   });
+}
+
+// Update fees from fee structure
+async function updateFeesFromStructure(className) {
+  if (!currentFeeStructure || !className) {
+    return;
+  }
+
+  const { breakdown, total } = getClassFeeBreakdown(currentFeeStructure, className);
+
+  if (breakdown.length > 0) {
+    // Auto-fill the fees
+    let classFee = 0;
+    breakdown.forEach(item => {
+      classFee += item.amount;
+    });
+
+    document.getElementById('classFee').value = classFee;
+    document.getElementById('transportFee').value = 0;
+    document.getElementById('otherFees').value = 0;
+    calculateTotalFees();
+
+    showAlert(`Fees auto-filled: ${formatCurrency(total)}`, 'success', 3000);
+  }
 }
 
 // Calculate total fees
