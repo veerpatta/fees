@@ -23,7 +23,6 @@ export async function loadAcademicYears() {
   try {
     const q = query(
       collection(db, 'academicYears'),
-      orderBy('startDate', 'desc')
     );
 
     const snapshot = await getDocs(q);
