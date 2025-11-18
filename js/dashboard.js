@@ -703,4 +703,10 @@ window.loadStudentsView = loadStudentsView;
 window.loadDashboardData = loadDashboardData;
 
 // Initialize on page load
-document.addEventListener('DOMContentLoaded', initDashboard);
+// Check if DOM is already loaded (script is at end of body)
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initDashboard);
+} else {
+  // DOM is already ready, call directly
+  initDashboard();
+}
