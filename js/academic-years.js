@@ -298,8 +298,42 @@ export function generateAcademicYearName(startDate, endDate) {
   return `${startYear}-${endYear}`;
 }
 
+// Populate academic years dropdown
+export async function populateAcademicYears() {
+  try {
+    const years = await loadAcademicYears();
+    const yearSelect = document.getElementById('academicYear');
+    
+    if (!yearSelect) {
+      console.warn('Academic year select element not found');
+      return;
+    }
+    
+    if (years.length === 0) {
+      yearSelect.innerHTML = '<option value="">No academic years - Create one to begin</option>';
+      return;
+    }
+    
+    // Populate dropdown
+    yearSelect.innerHTML = years.map(year => {
+      const isActive = year.status === 'active' || year.isActive;
+      return `<option value="${year.id}" ${isActive ? 'selected' : ''}>${year.name}</option>`;
+    }).join('');
+    
+    return years;
+  } catch (error) {
+    console.error('Error populating academic years:', error);
+    const yearSelect = document.getElementById('academicYear');
+    if (yearSelect) {
+      yearSelect.innerHTML = '<option value="">Error loading years</option>';
+    }
+    throw error;
+  }
+}
+
 export default {
   loadAcademicYears,
+      populateAcademicYears,
   getActiveAcademicYear,
   addAcademicYear,
   updateAcademicYear,
